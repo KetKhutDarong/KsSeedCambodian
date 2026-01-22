@@ -5,8 +5,9 @@ import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
 
-dotenv.config(); // Load .env
+dotenv.config();
 
+// ================= APP SETUP =================
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -18,7 +19,8 @@ const __dirname = path.dirname(__filename);
 app.use(cors());
 app.use(express.json());
 
-// ================= SERVE STATIC FRONTEND =================
+// ================= SERVE STATIC FILES =================
+// This makes /css, /js, /image, /data work
 app.use(express.static(path.join(__dirname, "public")));
 
 // ================= CONNECT TO MONGODB =================
@@ -52,7 +54,7 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// ================= CONTACT ROUTE =================
+// ================= CONTACT API =================
 app.post("/contact", async (req, res) => {
   try {
     const contact = new Contact(req.body);
@@ -70,7 +72,7 @@ app.post("/contact", async (req, res) => {
   }
 });
 
-// ================= NEWSLETTER ROUTE =================
+// ================= NEWSLETTER API =================
 app.post("/subscribe", async (req, res) => {
   try {
     const newsletter = new Newsletter(req.body);
