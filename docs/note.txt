@@ -1,0 +1,52 @@
+2018-2019
+- ខេ​ អេស សុីដ ត្រូវបានបង្កើតឡើង និងបានផលិតពូជសណ្ដែកកួរសាកល្បង​ 25a
+- បានវេចខ្ចប់សណ្ដែកកួរ ត្រកួនសាកល្បង​ទីផ្សារ
+KsSeed was established and produced the 25a experimental Beans, pods and packaged the market trial Beans, pods and bindweed.
+
+2020-2021
+ពក្រីកការផលិតសណ្ដែកកួរពូជរំសាយសក់១ហិតា និង​បានពង្រីកទិផ្សារចំនួន​24ពូជ។ លើសពីនេះយើងបានពក្រីកកិច្ចសន្យាលើគ្រាប់ពូជត្រកូន។
+We have expanded the production of Beans, pods, hair dispersal variety, and Ratanak 1 hektometer​ ​variety, and have extended the market to 24 varieties. In addition, we have expanded the contract for bindweed.
+
+2022
+យើងបានពង្រីកទីផ្សរចំនួន 44ពូជ​ ថែមទាំងបានផលិតសណ្ដែកកួរ​ពូជរតនះ និងចុះកិច្ចសន្យាផលិតគ្រាប់ពូជត្រកួន។
+
+2024
+យើងបានពង្រីកទីផ្សារចំនួន 74ពូជ និងបានចុះកិច្ចសន្យាផលិតពីសហគមន៍សហភាពឧត្តមានជ័យ ទៅលើគ្រាប់ពូជ សណ្ដែកបាយ និង សណ្ដែកកួរ។
+We have expanded the market to 74 varieties and signed a production contract with the Otdam Meanchey Union Community for mung bean and Beans, pods seeds.
+
+ <button class="prdDetailBtn" data-en="Show Detial" data-km="មើលលម្អិត">
+                    <a href="showprdDetail.html">Show Detail</a>
+                </button>
+
+
+លក្ខណៈពូជ៖ ត្រសក់
+• អាយុប្រមូលផលៈ២៨-៣០ថ្ងៃបន្ទាប់ពីដាំ(បេះខ្ចី), ៥០-៦០ថ្ងៃសម្រាប់(បេះទុំ)
+• ពណ៌ផ្លែៈឆ្នូតបៃតងខ្ចី និងឆ្នូតបៃតងចាស់
+• ទំរង់ផ្លៃ:រាងជាសុីឡាង និងសាច់ស្រួយឆ្ងាញ់
+• ទំហំផ្លែៈ14-18cm x ម,ក3,2-4,5cm បេះខ្ចី
+• លក្ខណៈផ្កា:ផ្កាញី 65% និង 28%ពេលខ្វះជីវជាតិ ឬកំដៅលើសពី35C
+• លក្ខណៈលូតលាស់ៈមែកច្រើន ធន់នឹងស្ថានភាពដី
+• រដូវដាំដុះ: ១ឆ្នាំពេញ
+
+
+src: ,
+        title: "honeydew melon F1: Ratana seed",
+        info: "Deliciously crispy and juicy.",
+        weight: "2 grams/pkt",
+        views: 633,
+        features: [
+          "Harvest period: 28–30 days after planting (for young harvest), 50–60 days for mature harvest.",
+          "Fruit color: Light green stripes and dark green stripes.",
+          "Fruit shape: Cylindrical shape with crisp and tasty flesh.",
+          "Fruit size: 14–18 cm long × 3.2–4.5 cm in diameter (young harvest).",
+          "Flower characteristics: 65% female flowers; 28% under nutrient deficiency or temperatures above 35°C.",
+          "Growth characteristics: Many branches and tolerant to various soil conditions.",
+          "Growing season: Can be planted all year round.",
+        ],
+        planting: {
+          distance: "4.8 m bed distance, 2.4 m double row per bed",
+          plantDistance: "0.5 - 0.6 m between plants",
+          density: "830 - 690 plants/1000m²",
+        },
+
+
