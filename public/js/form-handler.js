@@ -2,7 +2,7 @@
 // Newsletter now sends ONLY email. Contact still sends full fields.
 
 document.addEventListener("DOMContentLoaded", () => {
-  const BACKEND_URL = "http://localhost:5502";
+   const BACKEND_URL = window.location.origin;
 
   const alertMessages = {
     en: {
