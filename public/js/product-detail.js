@@ -7,6 +7,7 @@ let db;
 // Global variables
 let currentLang = "en";
 let currentProduct = "cucumber";
+let productsCache = {}; // Cache for MongoDB products
 
 // DOM Elements
 const langSwitch = document.getElementById("langSwitch");
@@ -27,6 +28,80 @@ const fontMap = {
   en: "'Poppins', sans-serif",
   km: "'Hanuman', serif",
 };
+
+// ========== API FUNCTIONS ==========
+async function fetchProductFromAPI(productKey) {
+  try {
+    const response = await fetch(`/api/products/${productKey}`);
+    const data = await response.json();
+
+    if (data.success) {
+      return data.product;
+    }
+    console.error("Product not found:", data.message);
+    return null;
+  } catch (error) {
+    console.error("Network error:", error);
+    return null;
+  }
+}
+
+async function fetchAllProducts() {
+  try {
+    const response = await fetch("/api/products?limit=100");
+    const data = await response.json();
+
+    if (data.success) {
+      // Convert array to object format for compatibility
+      const productsObj = {};
+      data.products.forEach((product) => {
+        productsObj[product.productKey] = {
+          name: product.name,
+          desc: product.desc,
+          imgs: product.imgs || [],
+        };
+      });
+      return productsObj;
+    }
+    return {};
+  } catch (error) {
+    console.error("Error fetching products:", error);
+    return {};
+  }
+}
+
+async function fetchProductVariant(productKey, variantIndex) {
+  try {
+    const response = await fetch(
+      `/api/products/${productKey}/variants/${variantIndex}`,
+    );
+    const data = await response.json();
+
+    if (data.success) {
+      return data.variant;
+    }
+    return null;
+  } catch (error) {
+    console.error("Network error:", error);
+    return null;
+  }
+}
+
+async function incrementViewCount(productKey, variantIndex) {
+  try {
+    const response = await fetch(
+      `/api/products/${productKey}/variants/${variantIndex}/view`,
+      {
+        method: "POST",
+      },
+    );
+    const data = await response.json();
+    return data.success ? data.views : null;
+  } catch (error) {
+    console.error("Error incrementing view:", error);
+    return null;
+  }
+}
 
 // ========== INDEXEDDB FUNCTIONS ==========
 function initDB() {
@@ -110,7 +185,7 @@ function createSEOString(text) {
 function updateURL(
   productKey = null,
   variantIndex = null,
-  variantTitle = null
+  variantTitle = null,
 ) {
   const url = new URL(window.location);
 
@@ -123,7 +198,7 @@ function updateURL(
 
     if (variantIndex !== null && variantTitle) {
       // Use English title for URL regardless of current language
-      const variant = products[productKey]?.imgs[variantIndex - 1]; // Convert from 1-based to 0-based
+      const variant = productsCache[productKey]?.imgs[variantIndex - 1]; // Convert from 1-based to 0-based
       if (variant) {
         const seoName = createSEOString(variant.title.en);
         newSearch += `&variant=${variantIndex}`; // Store as 1-based
@@ -139,7 +214,7 @@ function updateURL(
   console.log("URL updated to:", url.toString());
 }
 
-function handleURLParameters() {
+async function handleURLParameters() {
   const search = window.location.search;
   console.log("URL search:", search);
 
@@ -152,9 +227,24 @@ function handleURLParameters() {
   // First param is product key
   const productKey = params[0];
 
-  if (!productKey || !products[productKey]) {
-    console.log("Invalid product key:", productKey);
+  if (!productKey) {
+    console.log("No product key in URL");
     return false;
+  }
+
+  // Check if product exists in cache or fetch it
+  if (!productsCache[productKey]) {
+    const product = await fetchProductFromAPI(productKey);
+    if (!product) {
+      console.log("Product not found in MongoDB:", productKey);
+      return false;
+    }
+    // Cache the product
+    productsCache[productKey] = {
+      name: product.name,
+      desc: product.desc,
+      imgs: product.imgs || [],
+    };
   }
 
   let variantIndex = null;
@@ -182,21 +272,21 @@ function handleURLParameters() {
   });
 
   // Show the product category
-  showProduct(productKey);
+  await showProduct(productKey);
 
   // If variant index is specified, open modal
   if (variantIndex !== null) {
     const index = parseInt(variantIndex);
-    if (!isNaN(index) && products[productKey].imgs[index - 1]) {
+    if (!isNaN(index) && productsCache[productKey]?.imgs[index - 1]) {
       // Convert from 1-based to 0-based
-      setTimeout(() => {
+      setTimeout(async () => {
         console.log(
           "Opening modal for:",
           productKey,
           "variant (1-based):",
-          index
+          index,
         );
-        showModal(productKey, index); // Pass 1-based index
+        await showModal(productKey, index); // Pass 1-based index
       }, 100);
       return true;
     }
@@ -222,7 +312,9 @@ langOptions.forEach((option) => {
       option.classList.add("active");
 
       // Update product display with new language
-      showProduct(currentProduct);
+      if (currentProduct) {
+        await showProduct(currentProduct);
+      }
     }
   });
 });
@@ -256,23 +348,32 @@ function updateLanguage(lang) {
 }
 
 // ========== PRODUCT DISPLAY FUNCTIONS ==========
-function showProduct(productKey) {
-  const product = products[productKey];
-  if (!product) {
-    console.error(`Product ${productKey} not found`);
-    return;
+async function showProduct(productKey) {
+  // Check cache first
+  if (!productsCache[productKey]) {
+    const product = await fetchProductFromAPI(productKey);
+    if (!product) {
+      console.error(`Product ${productKey} not found in MongoDB`);
+      return;
+    }
+    productsCache[productKey] = {
+      name: product.name,
+      desc: product.desc,
+      imgs: product.imgs || [],
+    };
   }
 
+  const product = productsCache[productKey];
   currentProduct = productKey;
-  const display = document.getElementById("product-display");
+  const displayElement = document.getElementById("product-display");
   const lang = currentLang;
 
   // Save to IndexedDB
   // saveToIndexedDB("currentProduct", productKey).catch(console.error);
 
-  display.classList.remove("fade-up");
-  void display.offsetWidth;
-  display.classList.add("fade-up");
+  displayElement.classList.remove("fade-up");
+  void displayElement.offsetWidth;
+  displayElement.classList.add("fade-up");
 
   // Update sidebar
   document.querySelectorAll(".product-list li").forEach((item) => {
@@ -283,7 +384,7 @@ function showProduct(productKey) {
   });
 
   // Generate HTML - use 1-based index for display
-  display.innerHTML = `
+  displayElement.innerHTML = `
         <h2>${product.name[lang]}</h2>
         <p>${product.desc[lang]}</p>
         <div class="image-grid">
@@ -297,7 +398,7 @@ function showProduct(productKey) {
                      data-product="${productKey}" 
                      data-index="${displayIndex}" 
                      data-seo-name="${seoName}">
-                  <img src="${img.src}" alt="${img.title[lang]}">
+                  <img src="${img.src}" alt="${img.title[lang]}" loading="lazy">
                   <h3>${img.title[lang]}</h3>
                   <p>${img.info[lang]}</p>
                   <div class="image-card-overlay">
@@ -314,16 +415,16 @@ function showProduct(productKey) {
 
   // Add click listeners to image cards
   document.querySelectorAll(".image-card").forEach((card) => {
-    card.addEventListener("click", function () {
+    card.addEventListener("click", async function () {
       const productKey = this.dataset.product;
       const index = Number.parseInt(this.dataset.index); // This is 1-based
 
       console.log("Card clicked:", { productKey, index });
 
       // Update URL (always use English for URL)
-      const variant = products[productKey].imgs[index - 1]; // Convert to 0-based for array access
+      const variant = productsCache[productKey].imgs[index - 1]; // Convert to 0-based for array access
       updateURL(productKey, index, variant.title.en);
-      showModal(productKey, index); // Pass 1-based index
+      await showModal(productKey, index); // Pass 1-based index
     });
   });
 }
@@ -365,13 +466,28 @@ async function downloadPdfWithCleanName(url, fileName) {
   }
 }
 
-function showModal(productKey, variantIndex) {
+async function showModal(productKey, variantIndex) {
   // variantIndex is 1-based, convert to 0-based for array access
   const arrayIndex = variantIndex - 1;
-  const product = products[productKey];
+
+  // Ensure product is in cache
+  if (!productsCache[productKey]) {
+    const product = await fetchProductFromAPI(productKey);
+    if (!product) {
+      console.error(`Product ${productKey} not found`);
+      return;
+    }
+    productsCache[productKey] = {
+      name: product.name,
+      desc: product.desc,
+      imgs: product.imgs || [],
+    };
+  }
+
+  const product = productsCache[productKey];
   if (!product || !product.imgs[arrayIndex]) {
     console.error(
-      `Variant ${variantIndex} (0-based: ${arrayIndex}) not found for product ${productKey}`
+      `Variant ${variantIndex} (0-based: ${arrayIndex}) not found for product ${productKey}`,
     );
     return;
   }
@@ -380,6 +496,9 @@ function showModal(productKey, variantIndex) {
   const lang = currentLang;
 
   currentVariantData = variant;
+
+  // Increment view count in MongoDB
+  await incrementViewCount(productKey, arrayIndex);
 
   const weightLabel = lang === "en" ? "Weight" : "ទម្ងន់";
   const viewsLabel = lang === "en" ? "Views" : "ចំនួនមើល";
@@ -411,8 +530,8 @@ function showModal(productKey, variantIndex) {
   modalBody.innerHTML = `
       <div class="modal-images">
         <img src="${variant.gallery[0].src}" alt="${
-    variant.title[lang]
-  }" class="modal-main-image" id="main-image">
+          variant.title[lang]
+        }" class="modal-main-image" id="main-image">
         <div style="display: flex; gap: 10px; margin-top: 15px;">
           ${variant.gallery
             .map(
@@ -426,7 +545,7 @@ function showModal(productKey, variantIndex) {
               class="thumbnail-img"
               data-index="${idx}"
             >
-          `
+          `,
             )
             .join("")}
         </div>
@@ -435,7 +554,7 @@ function showModal(productKey, variantIndex) {
         <h2 class="modal-title">${variant.title[lang]}</h2>
         <div class="modal-meta">
           <span>⚖️ ${weightLabel}: <strong>${variant.weight}</strong></span>
-          <span>👁️ ${viewsLabel}: <strong>${variant.views}</strong></span>
+          <span>👁️ ${viewsLabel}: <strong>${variant.views || 0}</strong></span>
         </div>
         
         <div class="modal-section">
@@ -490,7 +609,7 @@ function showModal(productKey, variantIndex) {
       if (hasPdf) {
         const fileName = `${variant.title[lang].replace(
           /\s+/g,
-          "-"
+          "-",
         )}-technical-guide.pdf`;
         downloadPdfWithCleanName(variant.pdfUrl, fileName);
       } else {
@@ -517,7 +636,7 @@ function showModal(productKey, variantIndex) {
     "variant (1-based):",
     variantIndex,
     "Has PDF:",
-    hasPdf
+    hasPdf,
   );
 }
 
@@ -598,9 +717,10 @@ function showVideo() {
   if (!currentVariantData) return;
 
   const variantTitle = currentVariantData.title[currentLang];
-  const productTitle = currentProduct
-    ? products[currentProduct].name[currentLang]
-    : "";
+  const productTitle =
+    currentProduct && productsCache[currentProduct]
+      ? productsCache[currentProduct].name[currentLang]
+      : "";
 
   // Update video alert message if modal exists
   const videoAlertMessage = document.getElementById("videoAlertMessage");
@@ -653,7 +773,7 @@ function closeGuideModal() {
 // ========== EVENT LISTENERS ==========
 // Product list click handlers
 listItems.forEach((item) => {
-  item.addEventListener("click", () => {
+  item.addEventListener("click", async () => {
     listItems.forEach((i) => i.classList.remove("active"));
     item.classList.add("active");
 
@@ -661,7 +781,7 @@ listItems.forEach((item) => {
     const url = new URL(window.location);
     url.search = `?${productKey}`;
     window.history.pushState({}, "", url);
-    showProduct(productKey);
+    await showProduct(productKey);
   });
 });
 
@@ -702,14 +822,14 @@ document.querySelectorAll(".nav-link").forEach((link) => {
 });
 
 // Browser back/forward navigation
-window.addEventListener("popstate", function () {
+window.addEventListener("popstate", async function () {
   console.log("popstate event fired");
-  const urlHandled = handleURLParameters();
+  const urlHandled = await handleURLParameters();
   if (!urlHandled) {
     // If URL doesn't contain product params, show default
     const urlParams = window.location.search;
     if (!urlParams || urlParams === "?" || urlParams === "") {
-      showProduct(currentProduct);
+      await showProduct(currentProduct);
     }
   }
 });
@@ -745,18 +865,24 @@ window.addEventListener("DOMContentLoaded", async () => {
     });
 
     // Handle URL parameters FIRST (this will open modal if URL has variant)
-    const urlHandled = handleURLParameters();
+    const urlHandled = await handleURLParameters();
 
     // If URL doesn't specify a product, show saved product
     if (!urlHandled) {
       console.log("No URL params, showing default product:", currentProduct);
-      showProduct(currentProduct);
+      await showProduct(currentProduct);
     }
   } catch (error) {
     console.error("Error initializing:", error);
     // Fallback to defaults
     updateLanguage("en");
-    showProduct("cucumber");
+    try {
+      await showProduct("cucumber");
+    } catch (e) {
+      console.error("Failed to show default product:", e);
+      document.getElementById("product-display").innerHTML =
+        '<p class="error">Error loading products. Please check your connection.</p>';
+    }
   }
 });
 
@@ -778,6 +904,13 @@ if (!document.querySelector("#fade-animation")) {
         opacity: 1;
         transform: translateY(0);
       }
+    }
+    
+    .error {
+      color: #dc3545;
+      text-align: center;
+      padding: 2rem;
+      font-size: 1.1rem;
     }
   `;
   document.head.appendChild(style);

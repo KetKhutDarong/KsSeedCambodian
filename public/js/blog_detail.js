@@ -1,48 +1,59 @@
 // blog_detail.js - For blog_detail.html
-// Assumes blog_data.js is loaded first
+// Works with MongoDB API
 
 // Get blog ID from URL parameter
 function getBlogIdFromUrl() {
   const params = new URLSearchParams(window.location.search);
-  return parseInt(params.get("id")) || 1;
+  return params.get("id");
 }
 
-// Load and render blog detail
-document.addEventListener("DOMContentLoaded", () => {
-  if (!window.blogsData) {
-    console.error("Blog data not loaded");
+// Main function to load and display blog
+async function loadBlogDetail() {
+  const blogId = getBlogIdFromUrl();
+
+  if (!blogId) {
+    showErrorMessage("Blog ID not found in URL");
     return;
   }
 
-  const blogId = getBlogIdFromUrl();
-  const blog = window.blogsData.find((b) => b.id === blogId);
+  try {
+    // Show loading state
+    showLoadingState(true);
 
-  if (blog) {
-    displayBlogDetail(blog);
-    displayOtherBlogs(blogId);
-  } else {
-    const container = document.getElementById("blogDetailContainer");
-    if (container) {
-      container.innerHTML = `
-        <div style="text-align: center; padding: 40px;">
-          <h2>Blog not found</h2>
-          <p>The blog post you're looking for doesn't exist.</p>
-          <a href="index.html#blog" class="btn btn-primary">Back to Blog</a>
-        </div>
-      `;
-    }
-  }
+    // Fetch blog from MongoDB API
+    const blog = await fetchBlogFromAPI(blogId);
 
-  // Listen for language changes
-  document.addEventListener("languageChanged", () => {
-    const blog = window.blogsData.find((b) => b.id === blogId);
     if (blog) {
       displayBlogDetail(blog);
-      displayOtherBlogs(blogId);
+      await loadOtherBlogs(blogId, blog.category);
+    } else {
+      showErrorMessage("Blog not found");
     }
-  });
-});
+  } catch (error) {
+    console.error("Error loading blog:", error);
+    showErrorMessage("Error loading blog. Please try again.");
+  } finally {
+    showLoadingState(false);
+  }
+}
 
+// Fetch blog from MongoDB API
+async function fetchBlogFromAPI(blogId) {
+  try {
+    const response = await fetch(`/api/blogs/${blogId}`);
+    const data = await response.json();
+
+    if (data.success && data.blog) {
+      return data.blog;
+    }
+    return null;
+  } catch (error) {
+    console.error("Error fetching blog:", error);
+    return null;
+  }
+}
+
+// Display blog detail
 function displayBlogDetail(blog) {
   const container = document.getElementById("blogDetailContainer");
   const descContainer = document.getElementById("blogDescContainer");
@@ -53,98 +64,276 @@ function displayBlogDetail(blog) {
   }
 
   const currentLang = localStorage.getItem("language") || "en";
+  const title = currentLang === "km" ? blog.title.km : blog.title.en;
+  const preview = currentLang === "km" ? blog.preview.km : blog.preview.en;
+  const category = currentLang === "km" ? blog.category?.km : blog.category?.en;
+  const content = currentLang === "km" ? blog.content.km : blog.content.en;
 
-  const title = currentLang === "km" ? blog.titleKm : blog.titleEn;
-  const preview = currentLang === "km" ? blog.previewKm : blog.previewEn;
-  const category = currentLang === "km" ? blog.categoryKm : blog.category;
-  const content = currentLang === "km" ? blog.contentKm : blog.contentEn;
+  // Format content with paragraphs
+  const formattedContent = content
+    .split("\n")
+    .filter((para) => para.trim())
+    .map((para) => `<p>${para}</p>`)
+    .join("");
 
+  // Main blog card
   container.innerHTML = `
     <div class="blog-detail-card">
       <div class="blog-detail-image">
-        <img src="${
-          blog.image || "/placeholder.svg?height=600&width=800"
-        }" alt="${title}" />
+        <img src="${blog.image || "/placeholder.svg"}" 
+             alt="${title}"
+             loading="lazy" />
       </div>
       <div class="blog-detail-text">
-        <h1 class="text-blog-title" data-en="${blog.titleEn}" data-km="${
-    blog.titleKm
-  }">${title}</h1>
-        <p class="date-news">
-          <span data-en="${blog.category}" data-km="${
-    blog.categoryKm
-  }">${category}</span> | ${blog.date}
-        </p>
-        <p class="text-blog" data-en="${blog.previewEn}" data-km="${
-    blog.previewKm
-  }">${preview}</p>
+        <h1 class="text-blog-title">${title}</h1>
+        <div class="blog-meta-detail">
+          ${category ? `<span class="blog-category-tag">${category}</span>` : ""}
+          <span class="blog-date">${blog.date || "No date"}</span>
+          <span class="blog-read-time">${blog.readTime || 0} min read</span>
+        </div>
+        <p class="text-blog-preview">${preview}</p>
       </div>
     </div>
   `;
 
+  // Detailed content
   descContainer.innerHTML = `
-    <h2 class="title-desc" data-en="${blog.titleEn}" data-km="${blog.titleKm}">${title}</h2>
-    <p class="text-desc" data-en="${blog.contentEn}" data-km="${blog.contentKm}">${content}</p>
+    <div class="blog-content-section">
+      <h2 class="title-desc">${title}</h2>
+      <div class="blog-content-text">
+        ${formattedContent}
+      </div>
+      <div class="blog-footer">
+        <div class="tags-section">
+          ${category ? `<span class="tag">${category}</span>` : ""}
+          <span class="tag">${currentLang === "km" ? "កសិកម្ម" : "Farming"}</span>
+          <span class="tag">${currentLang === "km" ? "បច្ចេកទេស" : "Techniques"}</span>
+        </div>
+        <div class="author-section">
+          <p>${currentLang === "km" ? "ដោយ" : "By"} <strong>KsSEED Team</strong></p>
+          <p>${currentLang === "km" ? "អាន់ថ្ងៃចុងក្រោយ" : "Updated on"} ${new Date(blog.updatedAt || blog.createdAt).toLocaleDateString()}</p>
+        </div>
+      </div>
+    </div>
   `;
 
-  // Scroll to top of page
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  // Update page metadata
+  updatePageMetadata(blog, currentLang);
 }
 
-function displayOtherBlogs(currentBlogId) {
+// Load other related blogs
+async function loadOtherBlogs(currentBlogId, currentCategory) {
   const grid = document.getElementById("otherBlogsGrid");
 
-  if (!grid || !window.blogsData) {
-    console.error("Other blogs grid or blog data not found");
+  if (!grid) {
+    console.error("Other blogs grid not found");
     return;
   }
 
+  try {
+    // Show loading for related blogs
+    grid.innerHTML =
+      '<div class="loading-related">Loading related blogs...</div>';
+
+    // Fetch other blogs (same category if possible)
+    const category = currentCategory?.en || "";
+    const response = await fetch(
+      `/api/blogs?limit=3${category ? `&category=${category}` : ""}`,
+    );
+    const data = await response.json();
+
+    if (data.success && data.blogs && data.blogs.length > 0) {
+      // Filter out current blog
+      const otherBlogs = data.blogs.filter(
+        (blog) => blog._id !== currentBlogId,
+      );
+
+      if (otherBlogs.length === 0) {
+        grid.innerHTML = '<p class="no-related">No other blogs available</p>';
+        return;
+      }
+
+      displayOtherBlogs(otherBlogs, grid);
+    } else {
+      grid.innerHTML = '<p class="no-related">No related blogs found</p>';
+    }
+  } catch (error) {
+    console.error("Error loading other blogs:", error);
+    grid.innerHTML = '<p class="error-related">Error loading related blogs</p>';
+  }
+}
+
+// Display other blogs
+function displayOtherBlogs(blogs, container) {
   const currentLang = localStorage.getItem("language") || "en";
 
-  // Get 3 other blogs (exclude current blog)
-  const otherBlogs = window.blogsData
-    .filter((b) => b.id !== currentBlogId)
-    .slice(0, 3);
+  container.innerHTML = blogs
+    .map((blog) => {
+      const title = currentLang === "km" ? blog.title.km : blog.title.en;
+      const preview = currentLang === "km" ? blog.preview.km : blog.preview.en;
+      const category =
+        currentLang === "km" ? blog.category?.km : blog.category?.en;
+      const readMoreText = currentLang === "km" ? "អានបន្ថែម →" : "Read More →";
 
-  // Clear existing content
-  grid.innerHTML = "";
+      return `
+      <div class="blog-card">
+        <div class="blog-image">
+          <img src="${blog.image || "/placeholder.svg"}" 
+               alt="${title}"
+               loading="lazy" />
+          ${category ? `<span class="blog-category">${category}</span>` : ""}
+        </div>
+        <div class="blog-content">
+          <div class="blog-meta">
+            <span class="blog-date">${blog.date || "No date"}</span>
+            <span class="blog-read">${blog.readTime || 0} min read</span>
+          </div>
+          <h3>${title}</h3>
+          <p>${preview}</p>
+          <a href="blog_detail.html?id=${blog._id}" class="blog-link">
+            ${readMoreText}
+          </a>
+        </div>
+      </div>
+    `;
+    })
+    .join("");
+}
 
-  otherBlogs.forEach((blog) => {
-    const card = createOtherBlogCard(blog, currentLang);
-    grid.appendChild(card);
+// Share blog function
+function shareBlog(blogId, title) {
+  const currentLang = localStorage.getItem("language") || "en";
+  const shareText =
+    currentLang === "km"
+      ? `អាន "${title}" នៅលើ KsSEED`
+      : `Read "${title}" on KsSEED`;
+  const shareUrl = window.location.href;
+
+  if (navigator.share) {
+    navigator.share({
+      title: title,
+      text: shareText,
+      url: shareUrl,
+    });
+  } else {
+    // Fallback: copy to clipboard
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      const message =
+        currentLang === "km"
+          ? "ភ្ជាប់ត្រូវបានចម្លងទៅក្តារតម្បៀតខ្ទាស់!"
+          : "Link copied to clipboard!";
+      alert(message);
+    });
+  }
+}
+
+// Update page metadata for SEO
+function updatePageMetadata(blog, lang) {
+  const title = lang === "km" ? blog.title.km : blog.title.en;
+  const description = lang === "km" ? blog.preview.km : blog.preview.en;
+
+  // Update page title
+  document.title = `${title} - KsSEED Blog`;
+
+  // Update meta description
+  let metaDesc = document.querySelector('meta[name="description"]');
+  if (!metaDesc) {
+    metaDesc = document.createElement("meta");
+    metaDesc.name = "description";
+    document.head.appendChild(metaDesc);
+  }
+  metaDesc.content = description;
+
+  // Update Open Graph tags
+  updateOpenGraphTags(blog, title, description);
+}
+
+// Update Open Graph tags for social sharing
+function updateOpenGraphTags(blog, title, description) {
+  const metaTags = {
+    "og:title": title,
+    "og:description": description,
+    "og:image": blog.image || window.location.origin + "/placeholder.svg",
+    "og:url": window.location.href,
+    "og:type": "article",
+    "og:site_name": "KsSEED",
+  };
+
+  Object.entries(metaTags).forEach(([property, content]) => {
+    let tag = document.querySelector(`meta[property="${property}"]`);
+    if (!tag) {
+      tag = document.createElement("meta");
+      tag.setAttribute("property", property);
+      document.head.appendChild(tag);
+    }
+    tag.setAttribute("content", content);
   });
 }
 
-function createOtherBlogCard(blog, lang) {
-  const card = document.createElement("div");
-  card.className = "blog-card";
+// Show loading state
+function showLoadingState(show) {
+  const container = document.getElementById("blogDetailContainer");
+  const descContainer = document.getElementById("blogDescContainer");
+  const otherContainer = document.getElementById("otherBlogsGrid");
 
-  const title = lang === "km" ? blog.titleKm : blog.titleEn;
-  const preview = lang === "km" ? blog.previewKm : blog.previewEn;
-  const category = lang === "km" ? blog.categoryKm : blog.category;
-  const readMoreText = lang === "km" ? "អានបន្ថែម →" : "Read More →";
-
-  card.innerHTML = `
-    <div class="blog-image">
-      <img src="${
-        blog.image || "/placeholder.svg?height=300&width=400"
-      }" alt="${title}" />
-      <span class="blog-category" data-en="${blog.category}" data-km="${
-    blog.categoryKm
-  }">${category}</span>
-    </div>
-    <div class="blog-content">
-      <div class="blog-meta">
-        <span class="blog-date">${blog.date}</span>
-        <span class="blog-read">${blog.readTime} min read</span>
-      </div>
-      <h3 data-en="${blog.titleEn}" data-km="${blog.titleKm}">${title}</h3>
-      <p data-en="${blog.previewEn}" data-km="${blog.previewKm}">${preview}</p>
-      <a href="blog_detail.html?id=${
-        blog.id
-      }" class="blog-link" data-en="Read More →" data-km="អានបន្ថែម →">${readMoreText}</a>
-    </div>
-  `;
-
-  return card;
+  if (show) {
+    if (container)
+      container.innerHTML = '<div class="blog-loading">Loading blog...</div>';
+    if (descContainer) descContainer.innerHTML = "";
+    if (otherContainer) otherContainer.innerHTML = "";
+  }
 }
+
+// Show error message
+function showErrorMessage(message) {
+  const container = document.getElementById("blogDetailContainer");
+  if (container) {
+    container.innerHTML = `
+      <div class="blog-error">
+        <h2>${message}</h2>
+        <p>${
+          localStorage.getItem("language") === "km"
+            ? "សូមព្យាយាមម្តងទៀត ឬត្រលប់ទៅទំព័របច្ចុប្បន្នលម្អិត។"
+            : "Please try again or return to the blog page."
+        }</p>
+        <a href="blog.html" class="btn btn-primary">
+          ${
+            localStorage.getItem("language") === "km"
+              ? "ត្រឡប់ទៅប្លុក"
+              : "Back to Blog"
+          }
+        </a>
+      </div>
+    `;
+  }
+}
+
+// Language change handler
+function onLanguageChange() {
+  const blogId = getBlogIdFromUrl();
+  if (blogId) {
+    // Reload the page to get content in new language
+    window.location.reload();
+  }
+}
+
+// Initialize when DOM is loaded
+document.addEventListener("DOMContentLoaded", () => {
+  // Load blog detail
+  loadBlogDetail();
+
+  // Listen for language changes
+  document.addEventListener("languageChange", (event) => {
+    if (event.detail && event.detail.lang) {
+      localStorage.setItem("language", event.detail.lang);
+      onLanguageChange();
+    }
+  });
+
+  // Add print button event listener
+  document.addEventListener("click", function (e) {
+    if (e.target.classList.contains("print-btn")) {
+      window.print();
+    }
+  });
+});

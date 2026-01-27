@@ -95,27 +95,98 @@ let currentLang = "en";
 const langSwitch = document.getElementById("langSwitch");
 const langOptions = document.querySelectorAll(".lang-option");
 
+
+// --- language switching snippet to use in your script.js ---
+
 langOptions.forEach((option) => {
   option.addEventListener("click", async () => {
     const lang = option.getAttribute("data-lang");
     if (lang !== currentLang) {
       currentLang = lang;
+
+      // Apply language strings to the page
       updateLanguage(lang);
       updateFont(lang);
 
-      // Save to IndexedDB
+      // Persist language to IndexedDB (existing)
       try {
         await saveLanguage(lang);
       } catch (error) {
-        console.error("Failed to save language:", error);
+        console.error("Failed to save language to IndexedDB:", error);
       }
 
-      // Update active state
+      // --- IMPORTANT: sync to body attribute + localStorage so other scripts can detect the language ---
+      try {
+        document.body.setAttribute("data-lang", lang);
+        localStorage.setItem("ksseed-language", lang);
+      } catch (err) {
+        console.warn("Could not set body data-lang/localStorage:", err);
+      }
+
+      // Notify custom alert system (if loaded)
+      if (window.customAlert && typeof window.customAlert.setLanguage === "function") {
+        window.customAlert.setLanguage(lang);
+      }
+
+      // Update active state UI
       langOptions.forEach((opt) => opt.classList.remove("active"));
       option.classList.add("active");
     }
   });
 });
+
+// Initialize on DOMContentLoaded: apply saved language plus ensure body + localStorage synced
+window.addEventListener("DOMContentLoaded", async () => {
+  try {
+    await initDB();
+    const savedLang = await loadLanguage(); // from IndexedDB
+    currentLang = savedLang || "en";
+
+    // Apply page content/font
+    updateLanguage(currentLang);
+    updateFont(currentLang);
+
+    // Ensure body attribute + localStorage are in sync for other scripts
+    document.body.setAttribute("data-lang", currentLang);
+    localStorage.setItem("ksseed-language", currentLang);
+
+    // Notify alert system if present
+    if (window.customAlert && typeof window.customAlert.setLanguage === "function") {
+      window.customAlert.setLanguage(currentLang);
+    }
+
+    // Update active UI state
+    langOptions.forEach((opt) => {
+      if (opt.getAttribute("data-lang") === currentLang) opt.classList.add("active");
+      else opt.classList.remove("active");
+    });
+  } catch (error) {
+    console.error("Error initializing language:", error);
+    updateFont("en");
+  }
+});
+
+// langOptions.forEach((option) => {
+//   option.addEventListener("click", async () => {
+//     const lang = option.getAttribute("data-lang");
+//     if (lang !== currentLang) {
+//       currentLang = lang;
+//       updateLanguage(lang);
+//       updateFont(lang);
+
+//       // Save to IndexedDB
+//       try {
+//         await saveLanguage(lang);
+//       } catch (error) {
+//         console.error("Failed to save language:", error);
+//       }
+
+//       // Update active state
+//       langOptions.forEach((opt) => opt.classList.remove("active"));
+//       option.classList.add("active");
+//     }
+//   });
+// });
 
 function updateLanguage(lang) {
   document
@@ -156,34 +227,34 @@ function updateFont(lang) {
   }
 }
 
-// Initialize with saved language on page load
-window.addEventListener("DOMContentLoaded", async () => {
-  try {
-    // Initialize database
-    await initDB();
+// // Initialize with saved language on page load
+// window.addEventListener("DOMContentLoaded", async () => {
+//   try {
+//     // Initialize database
+//     await initDB();
 
-    // Load saved language
-    const savedLang = await loadLanguage();
-    currentLang = savedLang;
+//     // Load saved language
+//     const savedLang = await loadLanguage();
+//     currentLang = savedLang;
 
-    // Apply saved language
-    updateLanguage(savedLang);
-    updateFont(savedLang);
+//     // Apply saved language
+//     updateLanguage(savedLang);
+//     updateFont(savedLang);
 
-    // Update active state in UI
-    langOptions.forEach((opt) => {
-      if (opt.getAttribute("data-lang") === savedLang) {
-        opt.classList.add("active");
-      } else {
-        opt.classList.remove("active");
-      }
-    });
-  } catch (error) {
-    console.error("Error initializing language:", error);
-    // Fallback to English if there's an error
-    updateFont("en");
-  }
-});
+//     // Update active state in UI
+//     langOptions.forEach((opt) => {
+//       if (opt.getAttribute("data-lang") === savedLang) {
+//         opt.classList.add("active");
+//       } else {
+//         opt.classList.remove("active");
+//       }
+//     });
+//   } catch (error) {
+//     console.error("Error initializing language:", error);
+//     // Fallback to English if there's an error
+//     updateFont("en");
+//   }
+// });
 
 let currentSlide = 0;
 const slides = document.querySelectorAll(".hero-image");
@@ -771,4 +842,118 @@ document.addEventListener("DOMContentLoaded", () => {
   autoScroll();
 
   window.addEventListener("resize", updateCardDimensions);
+});
+
+
+// ... (keep your existing script.js content) ...
+
+// UNIVERSAL FORM HANDLER - ensure it SKIPS contactForm and newsletterForm
+document.addEventListener('DOMContentLoaded', function() {
+  console.log('Universal form handler starting (will skip contact/newsletter if present)');
+
+  document.querySelectorAll('form').forEach(form => {
+    // skip contact/newsletter explicit forms (to avoid double-handling)
+    const formId = (form.id || "").toLowerCase();
+    if (formId === 'contactform' || formId === 'newsletterform') {
+      console.log(`Skipping universal handling for form id="${form.id}"`);
+      form.dataset.ajaxBound = "true";
+      return;
+    }
+
+    // skip if form is explicitly marked as custom-handled
+    if (form.dataset.customHandler === "true") {
+      console.log(`Skipping universal handling (customHandler) for form id="${form.id || form.name || 'unnamed'}"`);
+      form.dataset.ajaxBound = "true";
+      return;
+    }
+
+    // skip if explicitly opt-out
+    if (form.hasAttribute('data-no-ajax')) {
+      console.log(`Skipping universal handling (data-no-ajax) for form id="${form.id || form.name || 'unnamed'}"`);
+      return;
+    }
+
+    // Prevent double-binding
+    if (form.dataset.ajaxBound === "true") return;
+
+    form.addEventListener('submit', async function(event) {
+      event.preventDefault();
+      form.dataset.ajaxBound = "true";
+
+      console.log('Universal handler submit for form:', form.id || form.name || 'unnamed');
+
+      // determine endpoint by explicit attribute or default
+      let endpoint = form.getAttribute('data-endpoint') || '/contact';
+      if (form.id === 'newsletterForm') endpoint = '/subscribe';
+
+      // collect values
+      const inputs = form.querySelectorAll('input, textarea, select');
+      const payload = {};
+      inputs.forEach(input => {
+        if (!input.name || input.disabled) return;
+        if (input.type === 'checkbox') payload[input.name] = input.checked;
+        else payload[input.name] = input.value;
+      });
+
+      // If the form is a newsletter by id, validate email
+      if (form.id === 'newsletterForm') {
+        const email = payload.email || payload.newsletterEmail || "";
+        if (!email.includes('@')) {
+          if (window.customAlert) {
+            window.customAlert.removePreviousModals && window.customAlert.removePreviousModals();
+            window.customAlert.warning('Invalid Email', 'Please enter a valid email address', { autoClose: true, closeTime: 3000 });
+          } else {
+            alert('Please enter a valid email address');
+          }
+          return;
+        }
+      }
+
+      // UI feedback
+      const submitBtn = form.querySelector('button[type="submit"], input[type="submit"]');
+      const originalText = submitBtn ? submitBtn.textContent : null;
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Sending...'; }
+
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        let data;
+        try { data = await res.json(); } catch (err) { data = { success: false, message: 'Invalid server response' }; }
+
+        if (submitBtn) { submitBtn.disabled = false; if (originalText) submitBtn.textContent = originalText; }
+
+        if (data.success) {
+          if (window.customAlert) {
+            window.customAlert.removePreviousModals && window.customAlert.removePreviousModals();
+            window.customAlert.success('Success', data.message || 'Operation completed', { autoClose: true, closeTime: 3000 });
+          } else {
+            alert(data.message || 'Success');
+          }
+          form.reset();
+        } else {
+          if (window.customAlert) {
+            window.customAlert.removePreviousModals && window.customAlert.removePreviousModals();
+            window.customAlert.error('Error', data.message || 'Something went wrong', { autoClose: true, closeTime: 4000 });
+          } else {
+            alert('Error: ' + (data.message || 'Something went wrong'));
+          }
+        }
+      } catch (err) {
+        console.error('Universal handler error:', err);
+        if (submitBtn) { submitBtn.disabled = false; if (originalText) submitBtn.textContent = originalText; }
+        if (window.customAlert) {
+          window.customAlert.removePreviousModals && window.customAlert.removePreviousModals();
+          window.customAlert.error('Network Error', 'Please try again later', { autoClose: true, closeTime: 4000 });
+        } else {
+          alert('Network error. Please try again.');
+        }
+      }
+    });
+
+    console.log('Universal handler bound to form:', form.id || form.name || 'unnamed');
+  });
 });

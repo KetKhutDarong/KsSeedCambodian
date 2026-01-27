@@ -1,47 +1,161 @@
-// blog.js - Populate carousel with blog data from blog_data.js
-// This works with your existing Carousel class in script.js
-
 class Carousel {
   constructor() {
     this.wrapper = document.getElementById("carouselWrapper");
     this.prevBtn = document.getElementById("prevBtn");
     this.nextBtn = document.getElementById("nextBtn");
     this.dotsContainer = document.getElementById("dotsContainer");
-    this.cards = document.querySelectorAll(".blog-card");
 
-    this.originalCards = Array.from(this.cards);
-    this.totalOriginalCards = this.originalCards.length;
-    this.cloneCards();
+    // Initialize with empty data
+    this.originalCards = [];
+    this.totalOriginalCards = 0;
+    this.cards = [];
 
-    this.cardWidth = this.originalCards[0].offsetWidth;
+    // Configuration
+    this.cardWidth = 0;
     this.gap = 30;
     this.currentIndex = 3;
     this.autoScrollInterval = null;
-    this.autoScrollDelay = 2000;
+    this.autoScrollDelay = 3000; // 3 seconds
+    this.currentLang = localStorage.getItem("language") || "en";
 
-    this.initDots();
-    this.attachEventListeners();
-    this.scrollToSlide(false);
-    this.startAutoScroll();
-    window.addEventListener("resize", () => this.updateCardWidth());
+    // Initialize
+    this.init();
+  }
+
+  async init() {
+    try {
+      // Load blog data from MongoDB API
+      await this.loadBlogData();
+
+      // Set up the carousel
+      this.cardWidth = this.originalCards[0]?.offsetWidth || 400;
+      this.initDots();
+      this.attachEventListeners();
+      this.scrollToSlide(false);
+      this.startAutoScroll();
+
+      // Handle window resize
+      window.addEventListener("resize", () => this.updateCardWidth());
+    } catch (error) {
+      console.error("Error initializing carousel:", error);
+    }
+  }
+
+  async loadBlogData() {
+    try {
+      // Fetch blogs from MongoDB API
+      const response = await fetch("/api/blogs?limit=10");
+      const data = await response.json();
+
+      if (!data.success || !data.blogs || data.blogs.length === 0) {
+        console.warn("No blog data available");
+        return;
+      }
+
+      // Clear existing content
+      this.wrapper.innerHTML = "";
+      this.dotsContainer.innerHTML = "";
+
+      // Create blog cards
+      data.blogs.forEach((blog) => {
+        const card = this.createBlogCard(blog);
+        this.wrapper.appendChild(card);
+      });
+
+      // Get all cards
+      this.originalCards = Array.from(
+        this.wrapper.querySelectorAll(".blog-card"),
+      );
+      this.totalOriginalCards = this.originalCards.length;
+
+      if (this.totalOriginalCards === 0) {
+        console.warn("No blog cards created");
+        return;
+      }
+
+      // Clone cards for infinite scroll effect
+      this.cloneCards();
+    } catch (error) {
+      console.error("Error loading blog data:", error);
+      this.wrapper.innerHTML = `
+        <div class="carousel-error">
+          <p>Unable to load blog posts. Please try again later.</p>
+        </div>
+      `;
+    }
+  }
+
+  createBlogCard(blog) {
+    const card = document.createElement("div");
+    card.className = "blog-card";
+    card.dataset.id = blog._id;
+
+    const title = this.currentLang === "km" ? blog.title.km : blog.title.en;
+    const preview =
+      this.currentLang === "km" ? blog.preview.km : blog.preview.en;
+    const category =
+      this.currentLang === "km" ? blog.category?.km : blog.category?.en;
+    const readMoreText =
+      this.currentLang === "km" ? "អានបន្ថែម →" : "Read More →";
+
+    card.innerHTML = `
+      <div class="blog-image">
+        <img
+          src="${blog.image || "/placeholder.svg?height=300&width=400"}"
+          alt="${title}"
+          loading="lazy"
+        />
+        ${category ? `<span class="blog-category">${category}</span>` : ""}
+      </div>
+      <div class="blog-content">
+        <div class="blog-meta">
+          <span class="blog-date"> ${blog.date || "No date"}</span>
+          <span class="blog-read">⏱️ ${blog.readTime || 0} min read</span>
+        </div>
+        <h3>${title}</h3>
+        <p>${preview}</p>
+        <a href="blog_detail.html?id=${blog._id}" class="blog-link">
+          ${readMoreText}
+        </a>
+      </div>
+    `;
+
+    return card;
   }
 
   cloneCards() {
-    this.originalCards.slice(0, 3).forEach((card) => {
-      this.wrapper.appendChild(card.cloneNode(true));
+    if (this.totalOriginalCards === 0) return;
+
+    // Clone first 3 cards to end for infinite scroll
+    const firstThree = Array.from(this.originalCards).slice(0, 3);
+    firstThree.forEach((card) => {
+      const clone = card.cloneNode(true);
+      this.wrapper.appendChild(clone);
     });
-    this.originalCards.slice(-3).forEach((card) => {
-      this.wrapper.insertBefore(card.cloneNode(true), this.wrapper.firstChild);
+
+    // Clone last 3 cards to beginning for infinite scroll
+    const lastThree = Array.from(this.originalCards).slice(-3);
+    lastThree.reverse().forEach((card) => {
+      const clone = card.cloneNode(true);
+      this.wrapper.insertBefore(clone, this.wrapper.firstChild);
     });
-    this.cards = document.querySelectorAll(".blog-card");
+
+    // Update cards reference
+    this.cards = this.wrapper.querySelectorAll(".blog-card");
   }
 
   updateCardWidth() {
-    this.cardWidth = this.originalCards[0].offsetWidth;
+    if (this.originalCards.length > 0) {
+      this.cardWidth = this.originalCards[0].offsetWidth;
+    }
   }
 
   initDots() {
+    if (this.totalOriginalCards === 0) return;
+
     const dotsCount = this.totalOriginalCards;
+    this.dotsContainer.innerHTML = ""; // Clear existing dots
+
     for (let i = 0; i < dotsCount; i++) {
       const dot = document.createElement("div");
       dot.className = "dot" + (i === 0 ? " active" : "");
@@ -52,11 +166,18 @@ class Carousel {
   }
 
   updateDots() {
-    const dots = document.querySelectorAll(".dot");
+    if (this.totalOriginalCards === 0) return;
+
+    const dots = this.dotsContainer.querySelectorAll(".dot");
     let displayIndex = this.currentIndex - 3;
-    if (displayIndex < 0) displayIndex += this.totalOriginalCards;
-    if (displayIndex >= this.totalOriginalCards)
+
+    // Handle wrapping
+    if (displayIndex < 0) {
+      displayIndex += this.totalOriginalCards;
+    }
+    if (displayIndex >= this.totalOriginalCards) {
       displayIndex -= this.totalOriginalCards;
+    }
 
     dots.forEach((dot, index) => {
       dot.classList.toggle("active", index === displayIndex);
@@ -64,25 +185,41 @@ class Carousel {
   }
 
   next() {
+    if (this.totalOriginalCards === 0) return;
+
     this.currentIndex++;
     this.scrollToSlide(true);
   }
 
   prev() {
+    if (this.totalOriginalCards === 0) return;
+
     this.currentIndex--;
     this.scrollToSlide(true);
   }
 
   scrollToSlide(smooth = true) {
+    if (this.totalOriginalCards === 0) return;
+
     const scrollPosition = this.currentIndex * (this.cardWidth + this.gap);
+
     if (smooth) {
       this.wrapper.style.scrollBehavior = "smooth";
     } else {
       this.wrapper.style.scrollBehavior = "auto";
     }
+
     this.wrapper.scrollLeft = scrollPosition;
     this.updateDots();
 
+    // Handle infinite scroll wraparound
+    this.handleWraparound();
+  }
+
+  handleWraparound() {
+    if (this.totalOriginalCards === 0) return;
+
+    // If we're at the cloned end (right side), jump back to real cards
     if (this.currentIndex >= this.totalOriginalCards + 3) {
       setTimeout(() => {
         this.currentIndex = 3;
@@ -90,9 +227,11 @@ class Carousel {
         const scrollPosition = this.currentIndex * (this.cardWidth + this.gap);
         this.wrapper.scrollLeft = scrollPosition;
       }, 300);
-    } else if (this.currentIndex < 0) {
+    }
+    // If we're at the cloned beginning (left side), jump forward to real cards
+    else if (this.currentIndex < 0) {
       setTimeout(() => {
-        this.currentIndex = this.totalOriginalCards;
+        this.currentIndex = this.totalOriginalCards + 2;
         this.wrapper.style.scrollBehavior = "auto";
         const scrollPosition = this.currentIndex * (this.cardWidth + this.gap);
         this.wrapper.scrollLeft = scrollPosition;
@@ -101,21 +240,26 @@ class Carousel {
   }
 
   goToSlide(index) {
+    if (this.totalOriginalCards === 0) return;
+
     this.currentIndex = index + 3;
     this.scrollToSlide(true);
     this.resetAutoScroll();
   }
 
   startAutoScroll() {
+    if (this.totalOriginalCards === 0) return;
+
     this.autoScrollInterval = setInterval(
       () => this.next(),
-      this.autoScrollDelay
+      this.autoScrollDelay,
     );
   }
 
   stopAutoScroll() {
     if (this.autoScrollInterval) {
       clearInterval(this.autoScrollInterval);
+      this.autoScrollInterval = null;
     }
   }
 
@@ -125,125 +269,117 @@ class Carousel {
   }
 
   attachEventListeners() {
+    if (!this.prevBtn || !this.nextBtn) return;
+
     this.nextBtn.addEventListener("click", () => {
       this.next();
       this.resetAutoScroll();
     });
+
     this.prevBtn.addEventListener("click", () => {
       this.prev();
       this.resetAutoScroll();
     });
-    this.wrapper.addEventListener("mouseenter", () => this.stopAutoScroll());
-    this.wrapper.addEventListener("mouseleave", () => this.startAutoScroll());
+
+    if (this.wrapper) {
+      this.wrapper.addEventListener("mouseenter", () => this.stopAutoScroll());
+      this.wrapper.addEventListener("mouseleave", () => this.startAutoScroll());
+    }
+  }
+
+  updateLanguage(lang) {
+    this.currentLang = lang;
+    this.refreshCarousel();
+  }
+
+  async refreshCarousel() {
+    // Store current scroll position
+    const currentId = this.getCurrentBlogId();
+
+    // Reload data with new language
+    await this.loadBlogData();
+
+    // Restore position if possible
+    if (currentId) {
+      const newIndex = this.findCardIndexById(currentId);
+      if (newIndex !== -1) {
+        this.currentIndex = newIndex + 3;
+        this.scrollToSlide(false);
+      }
+    }
+  }
+
+  getCurrentBlogId() {
+    if (this.totalOriginalCards === 0) return null;
+
+    let displayIndex = this.currentIndex - 3;
+    if (displayIndex < 0) displayIndex += this.totalOriginalCards;
+    if (displayIndex >= this.totalOriginalCards)
+      displayIndex -= this.totalOriginalCards;
+
+    if (this.originalCards[displayIndex]) {
+      return this.originalCards[displayIndex].dataset.id;
+    }
+    return null;
+  }
+
+  findCardIndexById(blogId) {
+    return Array.from(this.originalCards).findIndex(
+      (card) => card.dataset.id === blogId,
+    );
+  }
+
+  destroy() {
+    this.stopAutoScroll();
+    window.removeEventListener("resize", () => this.updateCardWidth());
+
+    if (this.prevBtn) {
+      this.prevBtn.removeEventListener("click", () => {
+        this.next();
+        this.resetAutoScroll();
+      });
+    }
+
+    if (this.nextBtn) {
+      this.nextBtn.removeEventListener("click", () => {
+        this.prev();
+        this.resetAutoScroll();
+      });
+    }
+
+    if (this.wrapper) {
+      this.wrapper.removeEventListener("mouseenter", () =>
+        this.stopAutoScroll(),
+      );
+      this.wrapper.removeEventListener("mouseleave", () =>
+        this.startAutoScroll(),
+      );
+    }
   }
 }
 
+// Initialize carousel when DOM is loaded
 document.addEventListener("DOMContentLoaded", () => {
-  // Populate blog cards first
-  populateBlogCards();
+  // Create global carousel instance
+  window.blogCarousel = new Carousel();
 
-  // Then initialize your existing Carousel class from script.js
-  // The Carousel class will handle all the scrolling logic
-  new Carousel();
+  // Listen for language changes
+  document.addEventListener("languageChange", (event) => {
+    if (window.blogCarousel && event.detail && event.detail.lang) {
+      window.blogCarousel.updateLanguage(event.detail.lang);
+    }
+  });
 });
 
-function populateBlogCards() {
-  const carouselWrapper = document.getElementById("carouselWrapper");
-
-  if (!carouselWrapper || !window.blogsData) {
-    console.error("Carousel wrapper or blog data not found");
-    return;
-  }
-
-  const currentLang = localStorage.getItem("language") || "en";
-
-  // Clear existing placeholder cards
-  carouselWrapper.innerHTML = "";
-
-  // Create blog cards from data
-  window.blogsData.forEach((blog) => {
-    const card = createBlogCard(blog, currentLang);
-    carouselWrapper.appendChild(card);
+// Language change helper function (add this to your language switcher)
+function triggerLanguageChange(lang) {
+  const event = new CustomEvent("languageChange", {
+    detail: { lang },
   });
+  document.dispatchEvent(event);
+
+  // Also update carousel if it exists
+  if (window.blogCarousel) {
+    window.blogCarousel.updateLanguage(lang);
+  }
 }
-
-function createBlogCard(blog, lang) {
-  const card = document.createElement("div");
-  card.className = "blog-card";
-
-  const title = lang === "km" ? blog.titleKm : blog.titleEn;
-  const preview = lang === "km" ? blog.previewKm : blog.previewEn;
-  const category = lang === "km" ? blog.categoryKm : blog.category;
-  const readMoreText = lang === "km" ? "អានបន្ថែម →" : "Read More →";
-
-  card.innerHTML = `
-    <div class="blog-image">
-      <img
-        src="${blog.image || "/placeholder.svg?height=300&width=400"}"
-        alt="${title}"
-      />
-      <span class="blog-category" data-en="${blog.category}" data-km="${
-    blog.categoryKm
-  }">${category}</span>
-    </div>
-    <div class="blog-content">
-      <div class="blog-meta">
-        <span class="blog-date">${blog.date}</span>
-        <span class="blog-read">${blog.readTime} min read</span>
-      </div>
-      <h3 data-en="${blog.titleEn}" data-km="${blog.titleKm}">${title}</h3>
-      <p data-en="${blog.previewEn}" data-km="${blog.previewKm}">${preview}</p>
-      <a href="blog_detail.html?id=${
-        blog.id
-      }" class="blog-link" data-en="Read More →" data-km="អានបន្ថែម →">${readMoreText}</a>
-    </div>
-  `;
-
-  return card;
-}
-
-// // Update blog cards when language changes
-// function updateBlogCardsLanguage() {
-//   const currentLang = localStorage.getItem("language") || "en";
-
-//   // Update only the original cards (not clones created by Carousel class)
-//   document.querySelectorAll(".blog-card").forEach((card, index) => {
-//     // Get the blog data for this card
-//     const blogIndex = index % window.blogsData.length;
-//     const blog = window.blogsData[blogIndex];
-
-//     if (!blog) return;
-
-//     const title = card.querySelector("h3");
-//     const preview = card.querySelector("p");
-//     const category = card.querySelector(".blog-category");
-//     const readMoreLink = card.querySelector(".blog-link");
-
-//     if (title) {
-//       title.textContent = currentLang === "km" ? blog.titleKm : blog.titleEn;
-//       title.setAttribute("data-en", blog.titleEn);
-//       title.setAttribute("data-km", blog.titleKm);
-//     }
-//     if (preview) {
-//       preview.textContent =
-//         currentLang === "km" ? blog.previewKm : blog.previewEn;
-//       preview.setAttribute("data-en", blog.previewEn);
-//       preview.setAttribute("data-km", blog.previewKm);
-//     }
-//     if (category) {
-//       category.textContent =
-//         currentLang === "km" ? blog.categoryKm : blog.category;
-//       category.setAttribute("data-en", blog.category);
-//       category.setAttribute("data-km", blog.categoryKm);
-//     }
-//     if (readMoreLink) {
-//       readMoreLink.textContent =
-//         currentLang === "km" ? "អានបន្ថែម →" : "Read More →";
-//       readMoreLink.setAttribute("data-en", "Read More →");
-//       readMoreLink.setAttribute("data-km", "អានបន្ថែម →");
-//     }
-//   });
-// }
-
-// Listen for language change events
-// document.addEventListener("languageChanged", updateBlogCardsLanguage);
